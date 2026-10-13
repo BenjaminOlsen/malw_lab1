@@ -22,7 +22,7 @@ static const char* target_filename = NULL;
 static const char* source_filename = NULL;
 
 static int getinodev(const char *filename, ino_t *ino, dev_t *dev) {
-    if (!filename || !ino) return -1;
+    if (!filename || !ino || !dev) return -1;
 
     struct stat info;
     if (stat(filename, &info) == -1) return -1;
@@ -30,6 +30,15 @@ static int getinodev(const char *filename, ino_t *ino, dev_t *dev) {
     *dev = info.st_dev;
     return 0;
 }
+
+static int getinodevat(int dirfd, const char *filename, ino_t *ino, dev_t *dev) {
+    if (!filename || !ino || !dev) return -1;
+    struct stat info;
+    if (fstatat(dirfd, filename, &info, /* flags: follow symlinks: */ 0) == -1) return -1;
+    *ino = info.st_ino;
+    *dev = info.st_dev;
+    return 0;
+} 
 
 __attribute__ ((constructor)) void init_open() {
     orig_open = dlsym(RTLD_NEXT, "open");
@@ -86,9 +95,10 @@ int open(const char* pathname, int flags, ... /* mode_t mode */) {
 int openat(int dirfd, const char *pathname, int flags, ... /* mode_t mode*/) {
 
     printf("got openat\n");
-    
-    if (getinodev(pathname, &ino, &dev) != 0) {
-        fprintf(stderr, "problem getting ino, dev for %s\n", pathname);
+    ino_t ino;
+    dev_t dev; 
+    if (getinodevat(dirfd, pathname, &ino, &dev) != 0) {
+        fprintf(stderr, "problem getting ino, dev for dir %d, %s\n", dirfd, pathname);
         return -1;
     }
 

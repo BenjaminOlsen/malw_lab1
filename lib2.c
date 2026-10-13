@@ -82,3 +82,32 @@ int open(const char* pathname, int flags, ... /* mode_t mode */) {
 
     return 0;
 }
+
+int openat(int dirfd, const char *pathname, int flags, ... /* mode_t mode*/) {
+
+    printf("got openat\n");
+    
+    if (getinodev(pathname, &ino, &dev) != 0) {
+        fprintf(stderr, "problem getting ino, dev for %s\n", pathname);
+        return -1;
+    }
+
+    if (ino == target_ino && dev == target_dev) {
+        printf("doing the switcheroo %s <- %s\n", target_filename, source_filename);
+        pathname = source_filename;
+    }
+    if (flags & O_CREAT) {
+        va_list args;
+        va_start(args, flags);
+        mode_t mode = va_arg(args, mode_t);
+        va_end(args);
+        return orig_openat(dirfd, pathname, flags, mode);
+    } else {
+        return orig_openat(dirfd, pathname, flags);
+    }
+}
+
+FILE* fopen(const char *restrict pathname, const char *restrict mode) {
+    printf("got fopen\n");
+    return orig_fopen(pathname, mode);
+}

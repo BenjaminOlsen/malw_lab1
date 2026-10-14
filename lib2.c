@@ -1,3 +1,26 @@
+/* MALW LAB1 PT2.
+
+usage:
+
+(1) build
+$ make lib2.so
+
+(2) intercept open using defaults (target = /tmp/aaa, source = /tmp/bbb)
+$ LD_PRELOAD=./lib2.so cat aaa
+
+(3) use ./aaa and ./bbb instead of /tmp/aaa & /tmp/bbb 
+$ LD_PRELOAD=./lib2.so SOURCE=bbb TARGET=aaa cat aaa 
+
+(4) intercept openat:
+$ LD_PRELOAD=./lib2.so grep --color=always e aaa
+
+(5) intercept fopen:
+$ LD_PRELOAD=./lib2.so more aaa
+
+(6) clean:
+$ make clean
+*/
+
 #include <stdio.h>
 #include <fcntl.h>
 #include <dlfcn.h>
@@ -51,14 +74,14 @@ __attribute__ ((constructor)) void init_open() {
     source_filename = strdup(src != NULL ? src : "/tmp/bbb");
 
     if (getinodev(target_filename, &target_ino, &target_dev) != 0) {
-        fprintf(stderr, "seomthing's wrong with %s\n", target_filename);
+        fprintf(stderr, "can't stat %s\n", target_filename);
         return;
     }
     if (getinodev(source_filename, &source_ino, &source_dev) != 0) {
-        fprintf(stderr, "something's wrong with %s\n", source_filename);
+        fprintf(stderr, "cant stat %s\n", source_filename);
         return;
     }
-    fprintf(stdout, "init ok\n");
+    // fprintf(stdout, "init ok\n");
 }
 
 
@@ -68,12 +91,11 @@ int open(const char* pathname, int flags, ... /* mode_t mode */) {
     dev_t dev;
 
     if (getinodev(pathname, &ino, &dev) != 0) {
-        fprintf(stderr, "problem getting ino, dev for %s\n", pathname);
         return -1;
     }
 
     if (ino == target_ino && dev == target_dev) {
-        printf("doing the switcheroo %s <- %s\n", target_filename, source_filename);
+        // printf("doing the switcheroo %s <- %s\n", target_filename, source_filename);
         pathname = source_filename;
     }
 
@@ -94,16 +116,16 @@ int open(const char* pathname, int flags, ... /* mode_t mode */) {
 
 int openat(int dirfd, const char *pathname, int flags, ... /* mode_t mode*/) {
 
-    printf("got openat\n");
+    // printf("got openat\n");
     ino_t ino;
     dev_t dev; 
     if (getinodevat(dirfd, pathname, &ino, &dev) != 0) {
-        fprintf(stderr, "problem getting ino, dev for dir %d, %s\n", dirfd, pathname);
+        //fprintf(stderr, "problem getting ino, dev for dir %d, %s\n", dirfd, pathname);
         return -1;
     }
 
     if (ino == target_ino && dev == target_dev) {
-        printf("doing the switcheroo %s <- %s\n", target_filename, source_filename);
+        // printf("doing the switcheroo %s <- %s\n", target_filename, source_filename);
         pathname = source_filename;
     }
     if (flags & O_CREAT) {
@@ -118,6 +140,18 @@ int openat(int dirfd, const char *pathname, int flags, ... /* mode_t mode*/) {
 }
 
 FILE* fopen(const char *restrict pathname, const char *restrict mode) {
-    printf("got fopen\n");
+    // printf("got fopen\n");
+    ino_t ino;
+    dev_t dev;
+    if (getinodev(pathname, &ino, &dev) != 0) {
+        // fprintf(stderr, "problem getting inode, devide for %s\n", pathname);
+        return NULL;
+    }
+    
+    if (ino == target_ino && dev == target_dev) {
+        // printf("swithcing fopen target %s <- %s\n", target_filename, source_filename);
+        pathname = source_filename;
+    }
     return orig_fopen(pathname, mode);
 }
+

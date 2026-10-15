@@ -68,11 +68,13 @@ As shown in Figure 2, the library hides process `350009`. This confirms that the
 
 ### 1.4 Difficulties and Solutions
 
-One of the main challenges was avoiding false positives. Since `readdir()` is used to read many directories, filtering only by PID could also hide normal files with the same name. To reduce this problem, we implemented `is_proc()`, which checks whether the directory being read is `/proc` by comparing inode numbers.
+One of the main challenges was avoiding false positives. Since `readdir()` is used to read many directories, filtering only by PID could also hide normal files with the same name. To reduce this problem, we implemented `is_proc()`, which identifies `/proc` by comparing inode numbers.
 
 ---
 
 ## Exercise 2
+
+<!-- Exercise 2 will be added here. -->
 
 ---
 
@@ -80,12 +82,86 @@ One of the main challenges was avoiding false positives. Since `readdir()` is us
 
 ### 3.1 Objective
 
+The goal of this exercise is to make programs read content that is different from the original file. The main difference between Exercises 2 and 3 is that Exercise 2 uses a fake file stored on disk, whereas Exercise 3 stores the fake content in memory.
+
+The library must work with `cat`, `grep` and `more` without modifying the original file `/tmp/aaa`.
+
 ### 3.2 Implementation
+
+For this exercise, we divided the implementation into different parts.
+
+**Identification of the target file**
+
+To identify the target file, we use the functions `getinodev()` and `getinodevat()`, which obtain the inode and device numbers using `stat()` and `fstatat()`. Then, we compare these values with those of `/tmp/aaa` to check if the requested file is the target.
+
+```c
+target_ready = (getinodev("/tmp/aaa", &target_ino, &target_dev) == 0);
+```
+
+**Creating the fake file in memory**
+
+We implemented the function `create_fake_file()`, which uses `memfd_create()` to create an anonymous file in memory. Then, we use `write()` to store the text defined in `fake_content`.
+
+After writing the content, we use `lseek()` to move the cursor back to the beginning of the file, so it can be read correctly. Finally, the function returns the file descriptor.
+
+**Intercepting open() and openat()**
+
+We modified `open()` and `openat()` to check if the requested file matches the target file and if it is opened in read-only mode.
+
+If both conditions are true, the functions return the file descriptor created by `create_fake_file()`, instead of opening the original file. Otherwise, the original functions are called normally.
+
+**Intercepting fopen()**
+
+We also modified `fopen()` to work with the fake file. Since `create_fake_file()` returns an integer file descriptor and `fopen()` must return a `FILE *`, we used `fdopen()` to convert the descriptor into a file stream.
+
+This allows programs that use `fopen()` to read the fake content.
 
 ### 3.3 Testing and Results
 
+To verify the correct operation of `lib3.so`, we performed two different tests.
+
+**Original and fake content comparison**
+
+In the first test, we created the file `/tmp/aaa` with the text `original content`. Then, we executed `cat` normally and obtained the original content.
+
+After that, we executed the same command using `LD_PRELOAD` to load `lib3.so`. As shown in Figure 3, the output changed to the text defined in `fake_content`.
+
+Finally, we executed `cat` again without the library and obtained the original content. This confirms that the original file was not modified.
+
+![Original and fake content](images/lib3_1.png)
+
+*Figure 3. Comparison of cat output with and without LD_PRELOAD.*
+
+**Verification using grep and more**
+
+In the second test, we used the commands `grep` and `more` to check if the library also works with other programs.
+
+As shown in Figure 4, both commands displayed the fake content when the library was loaded using `LD_PRELOAD`.
+
+These results confirm that `lib3.so` works with the three commands tested: `cat`, `grep` and `more`.
+
+![Verification using grep and more](images/lib3_2.png)
+
+*Figure 4. Verification of fake content using grep and more.*
+
 ### 3.4 Difficulties and Solutions
+
+One of the main challenges was adapting `fopen()` to work with an anonymous file in memory. Since `memfd_create()` returns an integer file descriptor, we used `fdopen()` to convert it into a `FILE *`, which is required by `fopen()`.
+
+Another important aspect was the position of the cursor after writing the fake content. To avoid reading from the end of the file, we used `lseek()` to move the cursor back to the beginning.
+
+---
+
+## Exercise 4
+---
+
+## Exercise Windows Case
+
 
 ---
 
 ## AI Usage Declaration
+
+We used ChatGPT as a support tool during the laboratory to clarify concepts, review some technical aspects and improve the documentation.
+
+All final work was reviewed by the group, and we take full responsibility for the submitted results.
